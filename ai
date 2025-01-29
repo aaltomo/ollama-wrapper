@@ -1,0 +1,41 @@
+#!/bin/bash
+# Simple wrapper around ollama with a custom prompt
+# and reading input from STDIN. Assumes that ollama is found from port 11434.
+#
+# A very handy use case is to pipe in text from the clipboard (works on Mac):
+# pbpaste | ai "translate to english" -
+
+
+# trap ctrl-c and call ctrl_c()
+trap ctrl_c SIGINT
+
+function ctrl_c() {
+    echo "CTRL-C pressed, execution stopped."
+}
+
+if [ $# -eq 0 ]; then
+    echo "Usage: ai [instuctions] [optional stdin with -]"
+    exit 0
+fi
+
+INSTRUCTIONS="$1"
+INPUT=""
+MODEL="llama3.2"
+
+## Pass dash as second argument to pipe from STDIN
+if [[ "$#" -eq 2 && "$2" == "-" ]]; then
+    INPUT=$(cat)
+fi
+
+# Newlines and slashes in pasted input cause some issues so replace them here
+INPUT=$(echo $INPUT | sed 's/\n/\\n/g' | sed 's/"/\\"/g')
+
+PROMPT="<|begin_of_text|><|start_header_id|>system<|end_header_id|>\nSatisfy the user request given the input. No yapping. \nThe input:\n\n$INPUT\n\n<|eot_id|><|start_header_id|>user<|end_header_id|>\n$INSTRUCTIONS\n<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n"
+
+curl -s "http://localhost:11434/api/generate" -d '{"model": "'"$MODEL"'", "prompt": "'"$PROMPT"'", "raw": true}' \
+| while read -r stream; do
+  
+  echo $stream | jq -j '.response'
+
+  done
+
